@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Миша Диагност :)</title>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js" integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+" crossorigin="anonymous"></script>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/redux@4.1.0/dist/redux.min.js"></script>
+</head>
+<body>
+<div>
+    <input type="text" id="newAnswer" placeholder="New Answer" />
+    <input type="button" id="addAnswerBtn" value="Add" />
+    <input type="button" id="clearAnswerBtn" value="Clear" />
+    <label for="answerIn">Answer in sec</label>
+    <select id="answerIn">
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+    </select>
+    <ul id="answers">
+    </ul>
+    <br />
+    <input type="text" id="session" placeholder="Login Session" />
+    <input type="button" id="connectBtn" value="Connect" />
+    <input type="button" id="clearBtn" value="Clear" />
+    <input type="button" id="disconnectBtn" value="Disconnect" disabled />
+    <br />
+    <textarea id="messagesArea" cols="180" rows="24"></textarea>
+    <textarea id="chatsArea" cols="180" rows="24"></textarea>
+</div>
+
+<script>
+    class Actions {
+        static connected(sessionId) {
+            return {type: 'connection.connected', sessionId: sessionId};
+        }
+
+        static disconnected(sessionId) {
+            return {type: 'connection.disconnected', sessionId: sessionId};
+        }
+
+        static addAnswer(answer) {
+            return {type: 'answer.add', answer: answer};
+        }
+
+        static clearAnswers() {
+            return {type: 'answer.clear'};
+        }
+
+        static setAnswerIn(answerIn) {
+            return {type: 'answerIn.set', answerIn: answerIn};
+        }
+
+        static addMessage(type, text) {
+            return {type: 'message.add', message: {type: type, text: text}};
+        }
+
+        static clearMessages() {
+            return {type: 'message.clear'};
+        }
+    }
+
+    // Create the connectSocket function
+    function connectSocket() {
+        const sessionId = $("#session").val();
+        if (sessionId === "") {
+            alert("Please enter a session ID");
+            return;
+        }
+
+        window.socket = window.io('wss://server.chaport.com', {
+            "multiplex": false,
+            "path": "/6485cb6723e97c78a8398c46/socket.io-2",
+            "reconnection": true,
+            "transports": [
+                "websocket",
+                "polling"
+            ],
+            "hostname": "server.chaport.com",
+            "secure": true,
+            "port": "443"
+        });
+
+        socket.on('connect', function() {
+            console.log('Got connected!');
+            store.dispatch(Actions.connected(sessionId));
+        });
+
+        socket.on('disconnect', function() {
+            console.log('Got disconnected!');
+            store.dispatch(Actions.disconnected(store.getState().connection.sessionId));
+        });
+
+        socket.emit('greeting', {
+            "userType": 2,
+            "siteId": "6485cb6723e97c78a8398c46",
+            "sessionId": sessionId,
+            "localTimeOffset": -120
+        });
+
+        socket.on("message", function (data) {
+            console.log("message ", data)
+        });
+
+        socket.onAny(function(t, m) {
+            store.dispatch(Actions.addMessage(t, m));
+        });
+    }
+
+    function clearMessages() {
+        store.dispatch(Actions.clearMessages());
+    }
+
+    function disconnectSocket() {
+        window.socket.disconnect();
+    }
+
+    function render() {
+        const connection = store.getState().connection;
+        if (connection.connected) {
+            $("#connectBtn").prop("disabled", true);
+            $("#session").prop("disabled", true).val(connection.sessionId);
+            $("#disconnectBtn").prop("disabled", false);
+        } else {
+            $("#connectBtn").prop("disabled", false);
+            $("#session").prop("disabled", false).val(connection.sessionId);
+            $("#disconnectBtn").prop("disabled", true);
+        }
+
+        const answers = store.getState().answers;
+        var answersUl = $("#answers");
+        answersUl.empty();
+        answers.forEach(a => answersUl.append("<li>" + a + "</li>"));
+
+        const answerIn = store.getState().answerIn;
+        $("#answerIn").val(answerIn);
+
+        const messages = store.getState().messages;
+        $("#messagesArea").val(messages.map(m => m.type + ' - ' + JSON.stringify(m.text)).join('\n'));
+
+        const chats = store.getState().chats;
+        $("#chatsArea").empty();
+        Object.keys(chats).forEach(k => {
+            $("#chatsArea").append(k + '\n' + chats[k].map(c => '\t' + c.lastMessageChunk + ' - ' + c.lastMessageAt).join('\n') + '\n');
+        });
+    }
+
+    // Create the Redux store and action creators
+    const store = Redux.createStore((state = {
+        connection: {
+            connected: false,
+            sessionId: 'OKi9ZB20Ghg6HZlAmF_GCtbpCu2eJDR4',
+            operatorId: ''
+        },
+        messages: [],
+        chats: {},
+        answers: ['Здравствуйте. Меня зовут Михаил, я постараюсь Вам помочь'],
+        answerIn: 10
+    }, action) => {
+        var updatedState = Object.assign({}, state);
+        if (action.type === 'connection.connected') {
+            updatedState.connection.connected = true;
+            updatedState.connection.sessionId = action.sessionId;
+        } else if (action.type === 'connection.disconnected') {
+            updatedState.connection.connected = false;
+            updatedState.connection.sessionId = action.sessionId;
+        } else if (action.type === 'answer.add') {
+            updatedState.answers.push(action.answer);
+        } else if (action.type === 'answer.clear') {
+            updatedState.answers = [];
+        } else if (action.type === 'answerIn.set') {
+            updatedState.answerIn = action.answerIn;
+        } else if (action.type === 'message.add') {
+            updatedState.messages.push({type: action.message.type, text: action.message.text});
+            if (action.message.type === 'greeting') {
+                updatedState.connection.operatorId = action.message.text.operatorId;
+            } else if (action.message.type === 'chat-update') {
+                if (Object.keys(action.message.text).length === 1) {
+                    const chatId = Object.keys(action.message.text)[0];
+
+                    if (updatedState.chats.hasOwnProperty(chatId)) {
+                        updatedState.chats[chatId].push(action.message.text[chatId][0]);
+                    } else {
+                        updatedState.chats[chatId] = action.message.text[chatId];
+                    }
+                }
+
+                // if chat not answered and there no operators then answer
+                if (Object.keys(action.message.text).length === 1) {
+                    const chatId = Object.keys(action.message.text)[0];
+
+                    if (updatedState.chats.hasOwnProperty(chatId)) {
+                        const chat = updatedState.chats[chatId];
+                        if (chat.length === 1) {
+                            const answerAfterSec = Math.floor(Math.random() * updatedState.answerIn + 1);
+                            setTimeout(() => {
+                                // if no more messages in chat then answer
+                                const actualState = store.getState();
+                                if (actualState.chats.hasOwnProperty(chatId)) {
+                                    const chat = updatedState.chats[chatId];
+                                    if (chat.length === 1) {
+                                        const answer = updatedState.answers[Math.floor(Math.random() * updatedState.answers.length)];
+                                        window.socket.emit('message', {
+                                            // "key":
+                                            "visitorId": chatId,
+                                            "text": answer,
+                                            "timestamp": new Date().toISOString(),
+                                            "isRich": false
+                                        });
+                                    }
+                                }
+                            }, answerAfterSec * 1000);
+                        }
+                    }
+                }
+            }
+        } else if (action.type === 'message.clear') {
+            updatedState.messages = [];
+        }
+
+        return updatedState;
+    });
+
+    store.subscribe(render);
+
+    // Add event listeners to the Connect, Clear, and Disconnect buttons
+    $(document).ready(function () {
+        $("#addAnswerBtn").click(function () {
+            const answerInput = $("#newAnswer");
+            const answer = answerInput.val();
+            if (answer.length > 0) {
+                answerInput.val('');
+                store.dispatch(Actions.addAnswer(answer));
+            }
+        });
+
+        $("#clearAnswerBtn").click(function () {
+            store.dispatch(Actions.clearAnswers());
+        });
+
+        $("#answerIn").change(function () {
+            const answerIn = $("#answerIn").val();
+            store.dispatch(Actions.setAnswerIn(answerIn));
+        });
+
+        $("#connectBtn").click(function () {
+            connectSocket();
+        });
+
+        $("#clearBtn").click(function () {
+            clearMessages();
+        });
+
+        $("#disconnectBtn").click(function () {
+            disconnectSocket();
+        });
+
+        render();
+    });
+</script>
+</body>
+</html>
