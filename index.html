@@ -12,8 +12,18 @@
     <input type="text" id="newAnswer" placeholder="New Answer" />
     <input type="button" id="addAnswerBtn" value="Add" />
     <input type="button" id="clearAnswerBtn" value="Clear" />
-    <label for="answerIn">Answer in sec</label>
-    <select id="answerIn">
+    <label for="answerInMin">Answer in between</label>
+    <select id="answerInMin">
+        <option value="0">0</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+    </select>
+    <label for="answerInMax">and</label>
+    <select id="answerInMax">
+        <option value="1">1</option>
         <option value="5">5</option>
         <option value="10">10</option>
         <option value="20">20</option>
@@ -49,8 +59,12 @@
             return {type: 'answer.clear'};
         }
 
-        static setAnswerIn(answerIn) {
-            return {type: 'answerIn.set', answerIn: answerIn};
+        static setAnswerInMin(answerInMin) {
+            return {type: 'answerInMin.set', answerInMin: answerInMin};
+        }
+
+        static setAnswerInMax(answerInMax) {
+            return {type: 'answerInMax.set', answerInMax: answerInMax};
         }
 
         static addMessage(type, text) {
@@ -93,9 +107,17 @@
             store.dispatch(Actions.disconnected(store.getState().connection.sessionId));
         });
 
+        socket.on('reconnect', (attemptNumber) => {
+            console.log(`Reconnected to the server after ${attemptNumber} attempts`);
+        });
+
+        socket.on('reconnect_attempt', () => {
+            console.log('Attempting to reconnect...');
+        });
+
         socket.emit('greeting', {
             "userType": 2,
-            "siteId": "6485cb6723e97c78a8398c46",
+            "siteId": "64d3e7f8bd3e0bed75c51cad",
             "sessionId": sessionId,
             "localTimeOffset": -120
         });
@@ -134,8 +156,11 @@
         answersUl.empty();
         answers.forEach(a => answersUl.append("<li>" + a + "</li>"));
 
-        const answerIn = store.getState().answerIn;
-        $("#answerIn").val(answerIn);
+        const answerInMin = store.getState().answerInMin;
+        $("#answerInMin").val(answerInMin);
+
+        const answerInMax = store.getState().answerInMax;
+        $("#answerInMax").val(answerInMax);
 
         const messages = store.getState().messages;
         $("#messagesArea").val(messages.map(m => m.type + ' - ' + JSON.stringify(m.text)).join('\n'));
@@ -151,13 +176,14 @@
     const store = Redux.createStore((state = {
         connection: {
             connected: false,
-            sessionId: 'OKi9ZB20Ghg6HZlAmF_GCtbpCu2eJDR4',
+            sessionId: 'j7WxUkRzrFXruF1kg4ZA82AhBlLNGMw4',
             operatorId: ''
         },
         messages: [],
         chats: {},
         answers: ['Здравствуйте. Меня зовут Михаил, я постараюсь Вам помочь'],
-        answerIn: 10
+        answerInMin: 1,
+        answerInMax: 10
     }, action) => {
         var updatedState = Object.assign({}, state);
         if (action.type === 'connection.connected') {
@@ -170,15 +196,28 @@
             updatedState.answers.push(action.answer);
         } else if (action.type === 'answer.clear') {
             updatedState.answers = [];
-        } else if (action.type === 'answerIn.set') {
-            updatedState.answerIn = action.answerIn;
+        } else if (action.type === 'answerInMin.set') {
+            updatedState.answerInMin = action.answerInMin;
+        } else if (action.type === 'answerInMax.set') {
+            updatedState.answerInMax = action.answerInMax;
         } else if (action.type === 'message.add') {
             updatedState.messages.push({type: action.message.type, text: action.message.text});
             if (action.message.type === 'greeting') {
                 updatedState.connection.operatorId = action.message.text.operatorId;
+            } else if (action.message.type === 'chat-events') {
+                const chatId = action.message.text.visitorId;
+                if (action.message.text.sessions[0].operators.length > 0) {
+                    // put empty message to indicate other operators joined
+                    if (updatedState.chats.hasOwnProperty(chatId) && updatedState.chats[chatId].length === 1) {
+                        updatedState.chats[chatId].push({lastMessageChunk: 'Operator detected', lastMessageAt: new Date().toISOString()});
+                    }
+                }
             } else if (action.message.type === 'chat-update') {
                 if (Object.keys(action.message.text).length === 1) {
                     const chatId = Object.keys(action.message.text)[0];
+                    window.socket.emit('opened-chat', {
+                        "visitorId": chatId
+                    });
 
                     if (updatedState.chats.hasOwnProperty(chatId)) {
                         updatedState.chats[chatId].push(action.message.text[chatId][0]);
@@ -194,7 +233,7 @@
                     if (updatedState.chats.hasOwnProperty(chatId)) {
                         const chat = updatedState.chats[chatId];
                         if (chat.length === 1) {
-                            const answerAfterSec = Math.floor(Math.random() * updatedState.answerIn + 1);
+                            const answerAfterSec = Math.floor(Math.random() * updatedState.answerInMax + updatedState.answerInMin);
                             setTimeout(() => {
                                 // if no more messages in chat then answer
                                 const actualState = store.getState();
@@ -240,9 +279,29 @@
             store.dispatch(Actions.clearAnswers());
         });
 
-        $("#answerIn").change(function () {
-            const answerIn = $("#answerIn").val();
-            store.dispatch(Actions.setAnswerIn(answerIn));
+        $("#answerInMin").change(function (e) {
+            const answerInMax = store.getState().answerInMax;
+            const answerInMin = $("#answerInMin").val();
+            if (answerInMin > answerInMax) {
+                e.preventDefault();
+                $(this).prop('selectedIndex', 0);
+                return;
+            }
+
+            store.dispatch(Actions.setAnswerInMin(answerInMin));
+        });
+
+        $("#answerInMax").change(function (e) {
+            const answerInMin = store.getState().answerInMin;
+            const answerInMax = $("#answerInMax").val();
+            if (answerInMin > answerInMax) {
+                console.log('answerInMin > answerInMax');
+                e.preventDefault();
+                $(this).prop('selectedIndex', 2);
+                return;
+            }
+
+            store.dispatch(Actions.setAnswerInMax(answerInMax));
         });
 
         $("#connectBtn").click(function () {
