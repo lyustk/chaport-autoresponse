@@ -176,7 +176,7 @@
     const store = Redux.createStore((state = {
         connection: {
             connected: false,
-            sessionId: 'j7WxUkRzrFXruF1kg4ZA82AhBlLNGMw4',
+            sessionId: 'dPX2jFffpDyI5xri-_THTTAazrzi_7JW',
             operatorId: ''
         },
         messages: [],
@@ -206,7 +206,7 @@
                 updatedState.connection.operatorId = action.message.text.operatorId;
             } else if (action.message.type === 'chat-events') {
                 const chatId = action.message.text.visitorId;
-                if (action.message.text.sessions[0].operators.length > 0) {
+                if (action.message.text.sessions[0].operators.length > 1) {
                     // put empty message to indicate other operators joined
                     if (updatedState.chats.hasOwnProperty(chatId) && updatedState.chats[chatId].length === 1) {
                         updatedState.chats[chatId].push({lastMessageChunk: 'Operator detected', lastMessageAt: new Date().toISOString()});
@@ -218,7 +218,6 @@
                     window.socket.emit('opened-chat', {
                         "visitorId": chatId
                     });
-
                     if (updatedState.chats.hasOwnProperty(chatId)) {
                         updatedState.chats[chatId].push(action.message.text[chatId][0]);
                     } else {
@@ -240,6 +239,10 @@
                                 if (actualState.chats.hasOwnProperty(chatId)) {
                                     const chat = updatedState.chats[chatId];
                                     if (chat.length === 1) {
+                                        window.socket.emit('join-chat', {
+                                            "visitorId": chatId
+                                        });
+
                                         const answer = updatedState.answers[Math.floor(Math.random() * updatedState.answers.length)];
                                         window.socket.emit('message', {
                                             // "key":
