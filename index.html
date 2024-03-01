@@ -117,7 +117,7 @@
 
         socket.emit('greeting', {
             "userType": 2,
-            "siteId": "64d3e7f8bd3e0bed75c51cad",
+            "siteId": "65e1c279fc6819e70a7c018a",
             "sessionId": sessionId,
             "localTimeOffset": -120
         });
@@ -232,7 +232,9 @@
                     if (updatedState.chats.hasOwnProperty(chatId)) {
                         const chat = updatedState.chats[chatId];
                         if (chat.length === 1) {
-                            const answerAfterSec = Math.floor(Math.random() * updatedState.answerInMax + updatedState.answerInMin);
+                            const randomBetweenMinAndMax =
+                                Math.floor(Math.random() * (Number(updatedState.answerInMax) - Number(updatedState.answerInMin) + 1));
+                            const answerAfterSec = randomBetweenMinAndMax + Number(updatedState.answerInMin);
                             setTimeout(() => {
                                 // if no more messages in chat then answer
                                 const actualState = store.getState();
@@ -243,14 +245,16 @@
                                             "visitorId": chatId
                                         });
 
-                                        const answer = updatedState.answers[Math.floor(Math.random() * updatedState.answers.length)];
-                                        window.socket.emit('message', {
-                                            // "key":
-                                            "visitorId": chatId,
-                                            "text": answer,
-                                            "timestamp": new Date().toISOString(),
-                                            "isRich": false
-                                        });
+                                        setTimeout(() => {
+                                            const answer = updatedState.answers[Math.floor(Math.random() * updatedState.answers.length)];
+                                            window.socket.emit('message', {
+                                                // "key":
+                                                "visitorId": chatId,
+                                                "text": answer,
+                                                "timestamp": new Date().toISOString(),
+                                                "isRich": false
+                                            });
+                                        }, 100);
                                     }
                                 }
                             }, answerAfterSec * 1000);
@@ -298,7 +302,6 @@
             const answerInMin = store.getState().answerInMin;
             const answerInMax = $("#answerInMax").val();
             if (answerInMin > answerInMax) {
-                console.log('answerInMin > answerInMax');
                 e.preventDefault();
                 $(this).prop('selectedIndex', 2);
                 return;
